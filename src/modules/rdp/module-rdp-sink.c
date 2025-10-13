@@ -295,18 +295,9 @@ static char* SinkMsgToString(int code) {
     return "unknown";
 }
 
-static void rdp_sink_unsuspend(struct userdata *u) {
-    /* Attempt to reopen socket and reset timestamp/latency */
-    if (u->fd == -1) {
-        open_socket(u);
-    }
-    u->timestamp = pa_rtclock_now();
-    reset_latency(u);
-    pa_log_debug("RDP Sink unsuspended: socket reopened, timestamp and latency reset");
-}
-
 static int sink_process_msg(pa_msgobject *o, int code, void *data,
                             int64_t offset, pa_memchunk *chunk) {
+
     struct userdata *u = PA_SINK(o)->userdata;
     uint32_t latency;
 
@@ -318,19 +309,17 @@ static int sink_process_msg(pa_msgobject *o, int code, void *data,
             *((pa_usec_t*) data) = (pa_usec_t)latency;
             pa_log_debug("Current Latency: %d us", latency);
             return 0;
-
-        case PA_SINK_MESSAGE_SET_STATE: {
-            pa_sink_state_t new_state = *(int*)(data);
-            pa_sink_state_t old_state = PA_SINK(o)->thread_info.state;
-            if (old_state == PA_SINK_SUSPENDED && (new_state == PA_SINK_IDLE || new_state == PA_SINK_RUNNING)) {
-                rdp_sink_unsuspend(u);
-            }
-            if (new_state == PA_SINK_IDLE || new_state == PA_SINK_SUSPENDED) {
-                reset_latency(u);
-                pa_log_debug("Reset latency");
+        
+        case PA_SINK_MESSAGE_SET_STATE:
+            switch (*(int*)(data))
+            {
+                case PA_SINK_IDLE:
+                case PA_SINK_SUSPENDED:
+                    reset_latency(u);
+                    pa_log_debug("Reset latency");
+                    break;
             }
             break;
-        }
     }
 
     return pa_sink_process_msg(o, code, data, offset, chunk);
